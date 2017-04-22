@@ -1,0 +1,17 @@
+package wrappers
+
+import (
+	"{{ .Source }}"
+	{{ range .Package.Imports }}{{ .Package }} "{{ .Path }}"
+	{{ end }}
+)
+
+{{ $pkgName := .Package.Name }}{{ range .Package.Interfaces }}type Wraps{{ .Name }} struct {
+	wrapped {{ $pkgName }}.{{ .Name }}
+}
+{{ $ifaceRef := . }}{{ range .Methods }}func (w *Wraps{{ $ifaceRef.Name }}) {{ .Name }}({{ $methodRef := . }}{{ range $x, $e := .In }}{{ $e.Name }} {{ $e.Type }}{{ if ne $x (add (len $methodRef.In) -1)}}, {{ end }}{{ end }}) ({{ $methodRef := . }}{{ range $x, $e := .Out }}{{ $e.Type }}{{ if ne $x (add (len $methodRef.Out) -1)}}, {{ end }}{{ end }}) {
+	// TODO: ADD YOUR CONTENT HERE
+	{{ if ne (len $methodRef.Out) 0}}return {{ end }}w.{{ .Name }}({{ $methodRef := . }}{{ range $x, $e := .In }}{{ $e.Name }}{{ if ne $x (add (len $methodRef.In) -1)}}, {{ end }}{{ end }})
+}
+{{ end }}
+{{ end }}

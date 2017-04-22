@@ -1,0 +1,6 @@
+package: github.com/kevinconway/wrapgen
+import:
+- package: github.com/Masterminds/sprig
+  version: 2.10.0
+- package: github.com/urfave/cli
+  version: v1.19.1
