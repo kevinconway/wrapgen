@@ -5,7 +5,10 @@
 //
 package wrapgentest
 
-import "os"
+import (
+	nethttp "net/http"
+	"os"
+)
 
 type unexportedStruct struct {
 	A string
@@ -45,6 +48,7 @@ type ExportedInterface interface {
 	J(one map[string]string) error
 	K(one ...string) error
 	L(one interface{}, two struct{}) error
+	M(one nethttp.Handler) error
 }
 
 type ExportedInterfaceWithEmbedded interface {

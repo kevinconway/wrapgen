@@ -19,12 +19,27 @@ type PackageParser interface {
 
 type defaultParser struct {
 	dirParser func(*token.FileSet, string, func(os.FileInfo) bool, parser.Mode) (map[string]*ast.Package, error)
+	counter   func(string) int
+}
+
+func counter() func(string) int {
+	var counts = make(map[string]int)
+	return func(name string) int {
+		var value, ok = counts[name]
+		if !ok {
+			value = 0
+			counts[name] = 0
+		}
+		counts[name] = counts[name] + 1
+		return value
+	}
 }
 
 // NewParser generates a PackageParser using the default implementation.
 func NewParser() PackageParser {
 	return &defaultParser{
 		dirParser: parser.ParseDir,
+		counter:   counter(),
 	}
 }
 
@@ -126,7 +141,7 @@ func (p *defaultParser) ParseFunc(pkg string, name string, f *ast.FuncType) (*Me
 	var method = &Method{Name: name, In: make([]*Parameter, 0), Out: make([]*Parameter, 0)}
 	if f.Params != nil {
 		for _, arg := range f.Params.List {
-			var param = &Parameter{Name: "NO_NAME"}
+			var param = &Parameter{Name: fmt.Sprintf("param%d", p.counter(pkg+name+"param"))}
 			if len(arg.Names) > 0 {
 				param.Name = arg.Names[0].String()
 			}
@@ -140,7 +155,7 @@ func (p *defaultParser) ParseFunc(pkg string, name string, f *ast.FuncType) (*Me
 	}
 	if f.Results != nil {
 		for _, arg := range f.Results.List {
-			var param = &Parameter{Name: "NO_NAME"}
+			var param = &Parameter{Name: fmt.Sprintf("result%d", p.counter(pkg+name+"result"))}
 			if len(arg.Names) > 0 {
 				param.Name = arg.Names[0].String()
 			}

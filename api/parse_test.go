@@ -43,11 +43,14 @@ func TestParseSelf(t *testing.T) {
 	if pkg.Name != "wrapgentest" {
 		t.Fatalf("wrong package name %s", pkg.Name)
 	}
-	if len(pkg.Imports) != 1 {
+	if len(pkg.Imports) != 2 {
 		t.Fatalf("wrong number of imports %d", len(pkg.Imports))
 	}
-	if pkg.Imports[0].Package != "os" {
+	if pkg.Imports[0].Package != "nethttp" {
 		t.Fatalf("wrong import %s", pkg.Imports[0].Package)
+	}
+	if pkg.Imports[1].Package != "os" {
+		t.Fatalf("wrong import %s", pkg.Imports[1].Package)
 	}
 	if len(pkg.Interfaces) != 2 {
 		t.Fatalf("wrong number of ifaces %d", len(pkg.Interfaces))
