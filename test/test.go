@@ -6,6 +6,7 @@
 package wrapgentest
 
 import (
+	"io"
 	nethttp "net/http"
 	"os"
 )
@@ -53,4 +54,8 @@ type ExportedInterface interface {
 
 type ExportedInterfaceWithEmbedded interface {
 	ExportedInterface
+}
+
+type ExportedInterfaceWithRemoteEmbedded interface {
+	io.Reader
 }

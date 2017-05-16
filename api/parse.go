@@ -7,6 +7,8 @@ import (
 	"go/token"
 	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -18,8 +20,11 @@ type PackageParser interface {
 }
 
 type defaultParser struct {
-	dirParser func(*token.FileSet, string, func(os.FileInfo) bool, parser.Mode) (map[string]*ast.Package, error)
-	counter   func(string) int
+	dirParser      func(*token.FileSet, string, func(os.FileInfo) bool, parser.Mode) (map[string]*ast.Package, error)
+	counter        func(string) int
+	importManifest map[string]string
+	ifaceManifest  map[string]map[string]*ast.InterfaceType
+	targetPackage  string
 }
 
 func counter() func(string) int {
@@ -38,12 +43,43 @@ func counter() func(string) int {
 // NewParser generates a PackageParser using the default implementation.
 func NewParser() PackageParser {
 	return &defaultParser{
-		dirParser: parser.ParseDir,
-		counter:   counter(),
+		dirParser:      parser.ParseDir,
+		counter:        counter(),
+		importManifest: make(map[string]string),
+		ifaceManifest:  make(map[string]map[string]*ast.InterfaceType),
+		targetPackage:  "",
 	}
 }
 
-func (p *defaultParser) ParsePackage(path string) (*Package, error) {
+func defaultGOPATH() string {
+	var env = "HOME"
+	if runtime.GOOS == "windows" {
+		env = "USERPROFILE"
+	}
+	if runtime.GOOS == "plan9" {
+		env = "home"
+	}
+	if home := os.Getenv(env); home != "" {
+		var def = filepath.Join(home, "go")
+		if filepath.Clean(def) == filepath.Clean(runtime.GOROOT()) {
+			return ""
+		}
+		return def
+	}
+	return ""
+}
+
+func gopath() string {
+	var p = os.Getenv("GOPATH")
+	if p == "" {
+		return defaultGOPATH()
+	}
+	return p
+}
+
+// Each directory path containing valid Google-golang code can only contain one package
+// definition. This helper will attempt to extract that package from the directory.
+func (p *defaultParser) openPackage(path string) (*ast.Package, error) {
 	var fs = token.NewFileSet()
 	var pkgs, e = p.dirParser(fs, path, nil, 0)
 	if e != nil {
@@ -52,35 +88,44 @@ func (p *defaultParser) ParsePackage(path string) (*Package, error) {
 	if len(pkgs) < 1 {
 		return nil, fmt.Errorf("found no valid Google-golang packages in %s", path)
 	}
-	// A valid package directory contains only one package declaration. Pluck
-	// what should be the only value out of the map.
-	var pkg *ast.Package
-	for _, v := range pkgs {
-		pkg = v
-		break
-	}
-	var result = &Package{Name: pkg.Name, Interfaces: make([]*Interface, 0)}
-	result.Imports = p.ParseImports(pkg.Files)
-	// Reduce the contents of the AST to only exported elements.
-	ast.PackageExports(pkg)
-
-	for _, f := range pkg.Files {
-		var iterator = NewInterfaceIterator(f)
-		for ifaceName, iface, e := iterator.Next(); e != ErrIteratorComplete; ifaceName, iface, e = iterator.Next() {
-			var i, er = p.ParseInterface(pkg.Name, ifaceName, iface)
-			if er != nil {
-				return nil, er
-			}
-			result.Interfaces = append(result.Interfaces, i)
+	for _, pkg := range pkgs {
+		if strings.HasSuffix(pkg.Name, "_test") {
+			continue
 		}
+		return pkg, nil
 	}
-	return result, nil
+	return nil, fmt.Errorf("impossible exit condition in package open")
 }
 
-func (p *defaultParser) ParseImports(fs map[string]*ast.File) []*Import {
-	var found = make(map[string]bool)
-	var result = make([]*Import, 0)
-	for _, f := range fs {
+// Each package requested is searched in the order of 1) vendor, 2) ${GOPATH}/src, and 3) stdlib.
+// Packages not found in this search result in an error.
+func (p *defaultParser) findImport(path string, base string) (*ast.Package, error) {
+	if len(base) > 0 {
+		var vendorDir = filepath.Join(base, "vendor", path)
+		var pkg, e = p.openPackage(vendorDir)
+		if e == nil {
+			return pkg, nil
+		}
+	}
+	var srcPath = filepath.Join(gopath(), "src", path)
+	var pkg, e = p.openPackage(srcPath)
+	if e == nil {
+		return pkg, e
+	}
+	var rootPath = filepath.Join(runtime.GOROOT(), "src", path)
+	return p.openPackage(rootPath)
+}
+
+// Iterate all files and populate import map with package imports
+// Iterate all interfaces and populate iface map with root level ifaces
+// Iterate all root level interfaces
+// 	For local embedded types populate with contents from root level iface map
+//  	For remote embedded types:
+//		Iterate all files of remote package
+//		Populate import mape with remote imports
+//		Iterate all interfaces and populate iface map at selector name level
+func (p *defaultParser) populateImports(pkg *ast.Package) {
+	for _, f := range pkg.Files {
 		for _, decl := range f.Decls {
 			var gd, ok = decl.(*ast.GenDecl)
 			if !ok || gd.Tok != token.IMPORT {
@@ -110,14 +155,50 @@ func (p *defaultParser) ParseImports(fs map[string]*ast.File) []*Import {
 						pkg = pkg[0 : len(pkg)-1]
 					}
 				}
-				if _, ok := found[pkg]; !ok {
-					found[pkg] = true
-					result = append(result, &Import{Package: pkg, Path: importPath})
-				}
+				p.importManifest[pkg] = importPath
 			}
 		}
 	}
-	return result
+}
+
+func (p *defaultParser) populateInterfaces(pkg *ast.Package, pkgName string) {
+	if _, ok := p.ifaceManifest[pkgName]; !ok {
+		p.ifaceManifest[pkgName] = make(map[string]*ast.InterfaceType)
+	}
+	// ast.PackageExports(pkg)
+	for _, f := range pkg.Files {
+		var iterator = NewInterfaceIterator(f)
+		for ifaceName, iface, e := iterator.Next(); e != ErrIteratorComplete; ifaceName, iface, e = iterator.Next() {
+			p.ifaceManifest[pkgName][ifaceName] = iface
+		}
+	}
+}
+
+func (p *defaultParser) ParsePackage(path string) (*Package, error) {
+	p.targetPackage = path
+	var pkg, e = p.openPackage(path)
+	if e != nil {
+		return nil, e
+	}
+	p.populateImports(pkg)
+	var result = &Package{Name: pkg.Name, Interfaces: make([]*Interface, 0)}
+	// Reduce the contents of the AST to only exported elements.
+	ast.PackageExports(pkg)
+	p.populateInterfaces(pkg, "")
+	for _, f := range pkg.Files {
+		var iterator = NewInterfaceIterator(f)
+		for ifaceName, iface, e := iterator.Next(); e != ErrIteratorComplete; ifaceName, iface, e = iterator.Next() {
+			var i, er = p.ParseInterface(pkg.Name, ifaceName, iface)
+			if er != nil {
+				return nil, er
+			}
+			result.Interfaces = append(result.Interfaces, i)
+		}
+	}
+	for name, path := range p.importManifest {
+		result.Imports = append(result.Imports, &Import{Package: name, Path: path})
+	}
+	return result, nil
 }
 
 func (p *defaultParser) ParseInterface(pkg string, name string, i *ast.InterfaceType) (*Interface, error) {
@@ -130,6 +211,37 @@ func (p *defaultParser) ParseInterface(pkg string, name string, i *ast.Interface
 				return nil, e
 			}
 			iface.Methods = append(iface.Methods, m)
+		case *ast.Ident:
+			var src, ok = p.ifaceManifest[""][n.String()]
+			if !ok {
+				return nil, fmt.Errorf("missing local embedded interface %s", n.String())
+			}
+			var i, e = p.ParseInterface(pkg, n.String(), src)
+			if e != nil {
+				return nil, e
+			}
+			iface.Methods = append(iface.Methods, i.Methods...)
+		case *ast.SelectorExpr:
+			var pkgName = n.X.(*ast.Ident).String()
+			var _, ok = p.ifaceManifest[pkgName]
+			if !ok {
+				var imp, e = p.findImport(p.importManifest[pkgName], p.targetPackage)
+				if e != nil {
+					return nil, e
+				}
+				p.populateImports(imp)
+				p.populateInterfaces(imp, pkgName)
+			}
+			var src *ast.InterfaceType
+			src, ok = p.ifaceManifest[pkgName][n.Sel.String()]
+			if !ok {
+				return nil, fmt.Errorf("missing remote embedded interface %s.%s %v", pkgName, n.Sel.String(), p.ifaceManifest[pkgName])
+			}
+			var i, e = p.ParseInterface(pkgName, n.Sel.String(), src)
+			if e != nil {
+				return nil, e
+			}
+			iface.Methods = append(iface.Methods, i.Methods...)
 		default:
 			continue
 		}
