@@ -7,8 +7,8 @@ import (
 
 func TestParseSelf(t *testing.T) {
 	var parser = NewParser()
-	var fullPath = filepath.Join(gopath(), "src", "github.com", "kevinconway", "wrapgen", "test")
-	var pkg, e = parser.ParsePackage(fullPath)
+	var path = filepath.Join("github.com", "kevinconway", "wrapgen", "test")
+	var pkg, e = parser.ParsePackage(path)
 	if e != nil {
 		t.Fatal(e.Error())
 	}
@@ -17,15 +17,6 @@ func TestParseSelf(t *testing.T) {
 	}
 	if len(pkg.Imports) < 3 {
 		t.Fatalf("wrong number of imports %d", len(pkg.Imports))
-	}
-	if pkg.Imports[0].Package != "io" {
-		t.Fatalf("wrong import %s", pkg.Imports[0].Package)
-	}
-	if pkg.Imports[1].Package != "nethttp" {
-		t.Fatalf("wrong import %s", pkg.Imports[1].Package)
-	}
-	if pkg.Imports[2].Package != "os" {
-		t.Fatalf("wrong import %s", pkg.Imports[2].Package)
 	}
 	if len(pkg.Interfaces) != 3 {
 		t.Fatalf("wrong number of ifaces %d", len(pkg.Interfaces))

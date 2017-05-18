@@ -4,13 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
-	"go/token"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
 	"strconv"
-	"strings"
 )
 
 // PackageParser consumes an absolute path to a valid Google-golang package
@@ -19,12 +13,21 @@ type PackageParser interface {
 	ParsePackage(path string) (*Package, error)
 }
 
-type defaultParser struct {
-	dirParser      func(*token.FileSet, string, func(os.FileInfo) bool, parser.Mode) (map[string]*ast.Package, error)
-	counter        func(string) int
-	importManifest map[string]string
-	ifaceManifest  map[string]map[string]*ast.InterfaceType
-	targetPackage  string
+type defaultParser struct{}
+
+// NewParser generates a PackageParser using the default implementation.
+func NewParser() PackageParser {
+	return &defaultParser{}
+}
+
+func (p *defaultParser) ParsePackage(path string) (*Package, error) {
+	return (&internalParser{
+		importer:       &defaultImporter{make(map[string]*ast.Package), parser.ParseDir},
+		counter:        counter(),
+		importManifest: make(map[string]string),
+		ifaceManifest:  make(map[string]map[string]*ast.InterfaceType),
+		target:         path,
+	}).ParsePackage(path)
 }
 
 func counter() func(string) int {
@@ -40,150 +43,37 @@ func counter() func(string) int {
 	}
 }
 
-// NewParser generates a PackageParser using the default implementation.
-func NewParser() PackageParser {
-	return &defaultParser{
-		dirParser:      parser.ParseDir,
-		counter:        counter(),
-		importManifest: make(map[string]string),
-		ifaceManifest:  make(map[string]map[string]*ast.InterfaceType),
-		targetPackage:  "",
-	}
+// internalParser is used to isolate the state management associated with parsing a package. This allows
+// the defaultParser to be re-used or used concurrently without needed to reset or lock the internal state.
+type internalParser struct {
+	importer       importer
+	counter        func(string) int
+	importManifest map[string]string
+	ifaceManifest  map[string]map[string]*ast.InterfaceType
+	target         string
 }
 
-func defaultGOPATH() string {
-	var env = "HOME"
-	if runtime.GOOS == "windows" {
-		env = "USERPROFILE"
-	}
-	if runtime.GOOS == "plan9" {
-		env = "home"
-	}
-	if home := os.Getenv(env); home != "" {
-		var def = filepath.Join(home, "go")
-		if filepath.Clean(def) == filepath.Clean(runtime.GOROOT()) {
-			return ""
-		}
-		return def
-	}
-	return ""
-}
-
-func gopath() string {
-	var p = os.Getenv("GOPATH")
-	if p == "" {
-		return defaultGOPATH()
-	}
-	return p
-}
-
-// Each directory path containing valid Google-golang code can only contain one package
-// definition. This helper will attempt to extract that package from the directory.
-func (p *defaultParser) openPackage(path string) (*ast.Package, error) {
-	var fs = token.NewFileSet()
-	var pkgs, e = p.dirParser(fs, path, nil, 0)
-	if e != nil {
-		return nil, e
-	}
-	if len(pkgs) < 1 {
-		return nil, fmt.Errorf("found no valid Google-golang packages in %s", path)
-	}
-	for _, pkg := range pkgs {
-		if strings.HasSuffix(pkg.Name, "_test") {
-			continue
-		}
-		return pkg, nil
-	}
-	return nil, fmt.Errorf("impossible exit condition in package open")
-}
-
-// Each package requested is searched in the order of 1) vendor, 2) ${GOPATH}/src, and 3) stdlib.
-// Packages not found in this search result in an error.
-func (p *defaultParser) findImport(path string, base string) (*ast.Package, error) {
-	if len(base) > 0 {
-		var vendorDir = filepath.Join(base, "vendor", path)
-		var pkg, e = p.openPackage(vendorDir)
-		if e == nil {
-			return pkg, nil
-		}
-	}
-	var srcPath = filepath.Join(gopath(), "src", path)
-	var pkg, e = p.openPackage(srcPath)
-	if e == nil {
-		return pkg, e
-	}
-	var rootPath = filepath.Join(runtime.GOROOT(), "src", path)
-	return p.openPackage(rootPath)
-}
-
-// Iterate all files and populate import map with package imports
-// Iterate all interfaces and populate iface map with root level ifaces
-// Iterate all root level interfaces
-// 	For local embedded types populate with contents from root level iface map
-//  	For remote embedded types:
-//		Iterate all files of remote package
-//		Populate import mape with remote imports
-//		Iterate all interfaces and populate iface map at selector name level
-func (p *defaultParser) populateImports(pkg *ast.Package) {
-	for _, f := range pkg.Files {
-		for _, decl := range f.Decls {
-			var gd, ok = decl.(*ast.GenDecl)
-			if !ok || gd.Tok != token.IMPORT {
-				continue
-			}
-			for _, spec := range gd.Specs {
-				var ok bool
-				var is *ast.ImportSpec
-				is, ok = spec.(*ast.ImportSpec)
-				if !ok {
-					continue
-				}
-				var importPath = string(is.Path.Value)
-				importPath = importPath[1 : len(importPath)-1] // remove quotes
-
-				// Default to the last path segment name as a best guess when an explicit
-				// name is not given.
-				var _, pkg = path.Split(importPath)
-				pkg = strings.SplitN(pkg, ".", 2)[0]
-				if is.Name != nil {
-					if is.Name.Name == "_" {
-						// This package was imported for a side-effect. Skip it.
-						continue
-					}
-					pkg = is.Name.Name
-					if pkg[len(pkg)-1] == '.' {
-						pkg = pkg[0 : len(pkg)-1]
-					}
-				}
-				p.importManifest[pkg] = importPath
-			}
-		}
-	}
-}
-
-func (p *defaultParser) populateInterfaces(pkg *ast.Package, pkgName string) {
+func (p *internalParser) populateInterfaces(pkg *ast.Package, pkgName string) {
 	if _, ok := p.ifaceManifest[pkgName]; !ok {
 		p.ifaceManifest[pkgName] = make(map[string]*ast.InterfaceType)
 	}
-	// ast.PackageExports(pkg)
 	for _, f := range pkg.Files {
-		var iterator = NewInterfaceIterator(f)
-		for ifaceName, iface, e := iterator.Next(); e != ErrIteratorComplete; ifaceName, iface, e = iterator.Next() {
-			p.ifaceManifest[pkgName][ifaceName] = iface
-		}
+		mergeMapIface(p.ifaceManifest[pkgName], NewInterfaceMapper().Map(NewInterfaceIterator(f)))
 	}
 }
 
-func (p *defaultParser) ParsePackage(path string) (*Package, error) {
-	p.targetPackage = path
-	var pkg, e = p.openPackage(path)
+func (p *internalParser) populateImports(pkg *ast.Package) {
+	mergeMapString(p.importManifest, p.importer.Imports(pkg))
+}
+
+func (p *internalParser) ParsePackage(path string) (*Package, error) {
+	var pkg, e = p.importer.Import(path, "")
 	if e != nil {
 		return nil, e
 	}
 	p.populateImports(pkg)
-	var result = &Package{Name: pkg.Name, Interfaces: make([]*Interface, 0)}
-	// Reduce the contents of the AST to only exported elements.
 	ast.PackageExports(pkg)
+	var result = &Package{Name: pkg.Name, Interfaces: make([]*Interface, 0)}
 	p.populateInterfaces(pkg, "")
 	for _, f := range pkg.Files {
 		var iterator = NewInterfaceIterator(f)
@@ -201,7 +91,7 @@ func (p *defaultParser) ParsePackage(path string) (*Package, error) {
 	return result, nil
 }
 
-func (p *defaultParser) ParseInterface(pkg string, name string, i *ast.InterfaceType) (*Interface, error) {
+func (p *internalParser) ParseInterface(pkg string, name string, i *ast.InterfaceType) (*Interface, error) {
 	var iface = &Interface{Name: name, Methods: make([]*Method, 0)}
 	for _, attribute := range i.Methods.List {
 		switch n := attribute.Type.(type) {
@@ -225,7 +115,7 @@ func (p *defaultParser) ParseInterface(pkg string, name string, i *ast.Interface
 			var pkgName = n.X.(*ast.Ident).String()
 			var _, ok = p.ifaceManifest[pkgName]
 			if !ok {
-				var imp, e = p.findImport(p.importManifest[pkgName], p.targetPackage)
+				var imp, e = p.importer.Import(p.importManifest[pkgName], p.target)
 				if e != nil {
 					return nil, e
 				}
@@ -249,7 +139,7 @@ func (p *defaultParser) ParseInterface(pkg string, name string, i *ast.Interface
 	return iface, nil
 }
 
-func (p *defaultParser) ParseFunc(pkg string, name string, f *ast.FuncType) (*Method, error) {
+func (p *internalParser) ParseFunc(pkg string, name string, f *ast.FuncType) (*Method, error) {
 	var method = &Method{Name: name, In: make([]*Parameter, 0), Out: make([]*Parameter, 0)}
 	if f.Params != nil {
 		for _, arg := range f.Params.List {
@@ -282,7 +172,7 @@ func (p *defaultParser) ParseFunc(pkg string, name string, f *ast.FuncType) (*Me
 	return method, nil
 }
 
-func (p *defaultParser) ParseType(pkg string, arg ast.Expr) (Type, error) {
+func (p *internalParser) ParseType(pkg string, arg ast.Expr) (Type, error) {
 	switch n := arg.(type) {
 	case *ast.ArrayType:
 		var len = -1
