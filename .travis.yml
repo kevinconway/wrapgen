@@ -1,0 +1,12 @@
+language: go
+sudo: false
+go:
+        - "1.7.x"
+        - "1.8.x"
+        - "master"
+install:
+        - go get github.com/Masterminds/glide
+        - ${GOPATH}/bin/glide up
+script:
+        - go test -cover -v ./api
+
