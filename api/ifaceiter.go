@@ -72,3 +72,23 @@ func (i *interfaceIterator) Next() (string, *ast.InterfaceType, error) {
 		}
 	}
 }
+
+// InterfaceMapper converts and InterfaceIterator into a map of name -> *ast.InterfaceType.
+type InterfaceMapper interface {
+	Map(InterfaceIterator) map[string]*ast.InterfaceType
+}
+
+// NewInterfaceMapper generates a default implementation of the InterfaceMapper.
+func NewInterfaceMapper() InterfaceMapper {
+	return &interfaceMapper{}
+}
+
+type interfaceMapper struct{}
+
+func (m *interfaceMapper) Map(iterator InterfaceIterator) map[string]*ast.InterfaceType {
+	var results = make(map[string]*ast.InterfaceType)
+	for name, iface, e := iterator.Next(); e != ErrIteratorComplete; name, iface, e = iterator.Next() {
+		results[name] = iface
+	}
+	return results
+}

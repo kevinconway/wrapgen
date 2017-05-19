@@ -5,8 +5,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"text/template"
 
@@ -15,39 +13,13 @@ import (
 	"github.com/urfave/cli"
 )
 
-func defaultGOPATH() string {
-	var env = "HOME"
-	if runtime.GOOS == "windows" {
-		env = "USERPROFILE"
-	}
-	if runtime.GOOS == "plan9" {
-		env = "home"
-	}
-	if home := os.Getenv(env); home != "" {
-		var def = filepath.Join(home, "go")
-		if filepath.Clean(def) == filepath.Clean(runtime.GOROOT()) {
-			return ""
-		}
-		return def
-	}
-	return ""
-}
-
-func gopath() string {
-	var p = os.Getenv("GOPATH")
-	if p == "" {
-		return defaultGOPATH()
-	}
-	return p
-}
-
 type pkgWrapper struct {
 	Source  string
 	Package *wrapgen.Package
 }
 
-func render(templateString string, sourcePath string, pkg *wrapgen.Package) (string, error) {
-	var t, e = template.New("wrapgen").Funcs(sprig.TxtFuncMap()).Parse(templateString)
+func render(templateString string, sourcePath string, pkg *wrapgen.Package, r string, l string) (string, error) {
+	var t, e = template.New("wrapgen").Funcs(sprig.TxtFuncMap()).Delims(r, l).Parse(templateString)
 	if e != nil {
 		return "", e
 	}
@@ -57,13 +29,12 @@ func render(templateString string, sourcePath string, pkg *wrapgen.Package) (str
 }
 
 func getPackage(sourcePath string) (*wrapgen.Package, error) {
-	var fullPath = filepath.Join(gopath(), "src", sourcePath)
 	var parser = wrapgen.NewParser()
-	var pkg, e = parser.ParsePackage(fullPath)
+	var pkg, e = parser.ParsePackage(sourcePath)
 	return pkg, e
 }
 
-func renderLocal(templatePath string, sourcePath string, pkg *wrapgen.Package) (string, error) {
+func renderLocal(templatePath string, sourcePath string, pkg *wrapgen.Package, r string, l string) (string, error) {
 	var file, e = os.Open(templatePath)
 	if e != nil {
 		return "", e
@@ -73,10 +44,10 @@ func renderLocal(templatePath string, sourcePath string, pkg *wrapgen.Package) (
 	if e != nil {
 		return "", e
 	}
-	return render(string(templateString), sourcePath, pkg)
+	return render(string(templateString), sourcePath, pkg, r, l)
 }
 
-func renderRemote(href string, sourcePath string, pkg *wrapgen.Package) (string, error) {
+func renderRemote(href string, sourcePath string, pkg *wrapgen.Package, r string, l string) (string, error) {
 	var resp, e = http.Get(href)
 	if e != nil {
 		return "", e
@@ -87,7 +58,7 @@ func renderRemote(href string, sourcePath string, pkg *wrapgen.Package) (string,
 	if e != nil {
 		return "", e
 	}
-	return render(string(templateString), sourcePath, pkg)
+	return render(string(templateString), sourcePath, pkg, r, l)
 }
 
 func main() {
@@ -105,6 +76,16 @@ func main() {
 			Value: "",
 			Usage: "The import path of the `PACKAGE` to render",
 		},
+		cli.StringFlag{
+			Name:  "rightdelim,r",
+			Value: "#!",
+			Usage: "The right-hand-side delimiter to use when rendering a template.",
+		},
+		cli.StringFlag{
+			Name:  "leftdelim,l",
+			Value: "!#",
+			Usage: "The left-hand-side delimiter to use when rendering a template.",
+		},
 	}
 	app.Action = func(c *cli.Context) error {
 		var templatePath = c.String("template")
@@ -119,13 +100,13 @@ func main() {
 		if e != nil {
 			return cli.NewExitError(e.Error(), 1)
 		}
-		var renderer func(string, string, *wrapgen.Package) (string, error)
+		var renderer func(string, string, *wrapgen.Package, string, string) (string, error)
 		renderer = renderLocal
 		if strings.HasPrefix(strings.ToLower(templatePath), "http") {
 			renderer = renderRemote
 		}
 		var result string
-		result, e = renderer(templatePath, sourcePath, pkg)
+		result, e = renderer(templatePath, sourcePath, pkg, c.String("rightdelim"), c.String("leftdelim"))
 		if e != nil {
 			return cli.NewExitError(e.Error(), 1)
 		}
