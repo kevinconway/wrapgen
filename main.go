@@ -19,7 +19,7 @@ type pkgWrapper struct {
 }
 
 func render(templateString string, sourcePath string, pkg *wrapgen.Package, r string, l string) (string, error) {
-	var t, e = template.New("wrapgen").Funcs(sprig.TxtFuncMap()).Delims(r, l).Parse(templateString)
+	var t, e = template.New("wrapgen").Funcs(sprig.TxtFuncMap()).Delims(l, r).Parse(templateString)
 	if e != nil {
 		return "", e
 	}
@@ -77,14 +77,14 @@ func main() {
 			Usage: "The import path of the `PACKAGE` to render",
 		},
 		cli.StringFlag{
-			Name:  "rightdelim,r",
+			Name:  "leftdelim,l",
 			Value: "#!",
-			Usage: "The right-hand-side delimiter to use when rendering a template.",
+			Usage: "The left-hand-side delimiter to use when rendering a template.",
 		},
 		cli.StringFlag{
-			Name:  "leftdelim,l",
+			Name:  "rightdelim,r",
 			Value: "!#",
-			Usage: "The left-hand-side delimiter to use when rendering a template.",
+			Usage: "The right-hand-side delimiter to use when rendering a template.",
 		},
 	}
 	app.Action = func(c *cli.Context) error {
