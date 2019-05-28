@@ -1,158 +1,155 @@
-# wrapgen - A code generator for Google-golang interfaces
+# wrapgen - A code generator for Go interfaces
 
-This project is a fork/derivative of <https://github.com/golang/mock> which
-contains a tool called `mockgen` that can consume any valid Google-golang
-interface and generate a mock version of it. `wrapgen` extends that concept
-to allow for any custom code generation based on interfaces. Given a valid
-template, using the `text/template` format, and a valid Google-golang package
-`wrapgen` will parse out all interfaces in the package and inject their content into
-your template.
+This project can inject the details of any Go interface into a custom template.
+The goal is to enable teams who either make frequent use of interface wrappers
+to layer on behavior, such as using a decorator pattern, or teams who often need
+to generate standard implementations of some interfaces, such as those genrating
+stubs for a test.
+
+This project is heavily inspired by <https://github.com/golang/mock> which
+contains a tool called `mockgen` that can generate an advanced mock
+implementation of any Go interface.
 
 ## Usage
 
+### Quick Example
+
 ```bash
-go get github.com/kevinconway/wrapgen
-go get golang.org/x/tools/cmd/goimports
+go install github.com/kevinconway/wrapgen
+go install golang.org/x/tools/cmd/goimports
 
-go run wrapgen.go \
-  -t "${GOPATH}/src/github.com/kevinconway/wrapgen/basetemplate.txt" \
-  -p "github.com/kevinconway/wrapgen/api" \
-  | ${GOPATH}/bin/goimports > wrappers.go
+${GOPATH}/bin/wrapgen \
+  --source=io \
+  --interface=Reader \
+  --interface=Writer \
+  --package=wrappers \
+  --template="https://github.com/kevinconway/wrapgen/templates/logtime.txt" \
+  | ${GOPATH}/bin/goimports
 ```
 
-All output are written to stdout. Depending on the template, code may not
-be rendered with the correct format or with extraneous import statements.
-Because of this, you very likely will need to run the output through a
-formatter like `gofmt` or `goimports` before the output will build.
+The output will look like:
 
-Template paths can either be a path on the filesystem or an HTTP(S)
-location.
-
-## Writing Templates
-
-This project comes with a few templates in the root of the repository. The
-`basicdecorator.txt` template will create a generic shell that wraps every
-exposed method of the interfaces found in a package and the `gomock.txt`
-template will generate an equivalent ouput to the `mockgen` command from the
-gomock project.
-
-In order to make templates that conflict the least amount with actual
-Google-golang code, the default template delimiters are set to `#!` and `!#`.
-However, these values are only the defaults and can be overridden by using
-the `--rightdelim` and `--leftdelim` flags to match the delimiters in your
-own template.
-
-The `basicdecorator.txt` template is provided as a starting point for creating
-interface decorators. For example, you can wrap your interface in debug logging
-during development by adding some content like the following:
-
-```
+```golang
 package wrappers
 
 import (
-	"#! .Source !#"
-	#! range .Package.Imports !##! .Package !# "#! .Path !#"
-	#! end !#
+        "io"
+        "log"
+        "time"
 )
 
-#! $pkgName := .Package.Name !##! range .Package.Interfaces !#type Wraps#! .Name !# struct {
-	wrapped #! $pkgName !#.#! .Name !#
-}
-#! $ifaceRef := . !##! range .Methods !#func (w *Wraps#! $ifaceRef.Name !#) #! .Name !#(#! $methodRef := . !##! range $x, $e := .In !##! $e.Name !# #! $e.Type !##! if ne $x (add (len $methodRef.In) -1)!#, #! end !##! end !#) (#! $methodRef := . !##! range $x, $e := .Out !##! $e.Type !##! if ne $x (add (len $methodRef.Out) -1)!#, #! end !##! end !#) {
-
-  var start = time.Now()
-  log.Println("starting func #! .Name !#")
-  defer func(start time.Time){
-      log.Printf("ended func #! .Name !# after %f seconds \n", time.Since(start).Seconds())
-  }(start)
-
-	#! if ne (len $methodRef.Out) 0!#return #! end !#w.#! .Name !#(#! $methodRef := . !##! range $x, $e := .In !##! $e.Name !##! if ne $x (add (len $methodRef.In) -1)!#, #! end !##! end !#)
-}
-#! end !#
-#! end !#
-```
-
-That template, given an interface like:
-
-```go
-package sourcepkg
-
-type Doer interface {
-  Do(r *http.Request) (*http.Response, error)
-}
-```
-
-will result in code like:
-
-```go
-package wrappers
-
-import (
-  "time"
-  "net/http"
-  "sourcepkg"
-)
-
-type DoerWrapper struct {
-  wrapped sourcepkg.Doer
+type WrapsReader struct {
+        wrapped io.Reader
 }
 
-func (w *DoerWrapper) Do(r *http.Request) (*http.Response, error) {
-  var start = time.Now()
-  log.Println("starting func Do")
-  defer func(start time.Time){
-      log.Printf("ended func Do after %f seconds \n", time.Since(start).Seconds())
-  }(start)
-  return w.wrapped.Do(r)
+func (w *WrapsReader) Read(p []byte) (int, error) {
+        start := time.Now()
+        defer func() {
+                log.Println("Read latency:", time.Now().Since(start))
+        }()
+        var n, err = w.Read(p)
+        return n, err
+}
+
+type WrapsWriter struct {
+        wrapped io.Writer
+}
+
+func (w *WrapsWriter) Write(p []byte) (int, error) {
+        start := time.Now()
+        defer func() {
+                log.Println("Write latency:", time.Now().Since(start))
+        }()
+        var n, err = w.Write(p)
+        return n, err
 }
 ```
 
-Templates have a top level object injected that contains a `#!.Source!#` and
-`#!.Package!#` attribute. The `#!.Source!#` attribute is a string that
-contains the import path of the package given at runtime that contains all of
-the source interfaces. The `#!.Package!#` attribute is a `Package` model which
-contains the following:
+All output is written to `stdout` and `stderr`. Template paths may either be
+URLs or file system paths. It is highly suggested to use `goimports` or another
+formatter as a post-processor.
 
+### CLI Options
+
+```bash
+wrapgen --help
+
+Usage of wrapgen:
+      --interface strings   The name of the interface to render.
+      --leftdelim string    Left-hand side delimiter for the template. (default "#!")
+      --package string      The package name that the resulting file will be in. Defaults to the source package.
+      --rightdelim string   Right-hand side delimiter for the template. (default "!#")
+      --source string       The import path of the package to render.
+      --template string     The template to render.
+      --timeout duration    Maximum runtime allowed for rendering. (default 1m0s)
 ```
+
+Any number of interfaces may be given by providing more `--interface` flags.
+
+### Writing Templates
+
+The `templates/basic.txt` template from this project is the best way to get
+started writing your own. It demonstrates the how to manage import statements,
+iterate over the collected interfaces, and already covers the complexity of
+rendering method arguments and outputs correctly.
+
+Whether using `template/basics.txt` as a starter or generating a new template
+from scratch, the template content must be valid `text/template` markup. By
+default, the character sets `#!` and `!#` are used as the left and right
+delimiters, respectively. Those characters are the default because they rarely,
+if ever, conflict with common character sets in Go code. You can adjust these
+with CLI flags.
+
+The root context injected into the template is `Package` from the following:
+
+```golang
+// Package is a container for all exported interfaces of a Go package.
 type Package struct {
 	Name       string
+	Source     *Import
 	Interfaces []*Interface
 	Imports    []*Import
 }
-    Package is a container for all exported interfaces of a Google-golang
-    package.
 
+// Import is a package name and path that is imported by another package.
 type Import struct {
 	Package string
 	Path    string
 }
-    Import is a package name and path that is imported by another package.
 
+// Interface is an exported interface defined in a package.
 type Interface struct {
 	Name    string
 	Methods []*Method
 }
-    Interface is an exported interface defined in a package.
 
+// Method is a named function attached to an interface.
 type Method struct {
 	Name string
 	In   []*Parameter
 	Out  []*Parameter
 }
-    Method is a named function attached to an interface.
 
+// Parameter is a named parameter used by a Method.
 type Parameter struct {
 	Name string
 	Type Type
 }
-    Parameter is a named parameter used by a Method.
 
+// Type is a Go type definition that can be rendered into a valid
+// Go code snippet.
 type Type interface {
 	String() string
 }
-    Type is a Google-golang type definition that can be rendered into a valid
-    Google-golang code snippet.
 ```
+
+Those are the structures available within any template. Each `Type` is
+specialized and will render correctly when calling `String()`. For example, a
+`Parameter` with `Type` of read-only channel of integers will render as `<-chan
+int` when calling `String()` on the type. The `templates/basic.txt` template
+contains examples of inspecting the type string in order to support variadics.
+This practice can be extended to, for example, determine if the first parameter
+is a context and optionall fetch a value from it.
 
 ## License
 

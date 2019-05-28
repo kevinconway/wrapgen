@@ -27,3 +27,6 @@ Session.vim
 *~
 # auto-generated tag files
 tags
+
+# project binary
+wrapgen

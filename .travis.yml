@@ -1,13 +1,9 @@
 language: go
 sudo: false
 go:
-        - "1.7.x"
-        - "1.8.x"
-        - "1.9.x"
+        - "1.12.x"
         - "master"
 install:
-        - go get github.com/Masterminds/glide
-        - ${GOPATH}/bin/glide up
+        - GO111MODULE=on go get
 script:
-        - go test -cover -v ./api
-
+        - GO111MODULE=on go test -race -cover -v ./internal
