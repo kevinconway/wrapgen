@@ -1,15 +1,15 @@
-// Package wrapgentest is used by the wrapgen test suite to test the package parser.
-// While it is completely possible to generate AST nodes and unit test the
-// parser code it is much easier to define a package and set of elements
-// to be parsed.
-//
-package wrapgentest
+// Package happy contains all possible success cases that we expect to see.
+// nolint
+package happy
 
 import (
 	"io"
 	nethttp "net/http"
 	"os"
+
+	"github.com/spf13/pflag"
 )
+
 
 type unexportedStruct struct {
 	A string
@@ -50,6 +50,7 @@ type ExportedInterface interface {
 	K(one ...string) error
 	L(one interface{}, two struct{}) error
 	M(one nethttp.Handler) error
+	N(one *pflag.FlagSet) error
 }
 
 type ExportedInterfaceWithEmbedded interface {
@@ -59,3 +60,22 @@ type ExportedInterfaceWithEmbedded interface {
 type ExportedInterfaceWithRemoteEmbedded interface {
 	io.Reader
 }
+
+type ExportedInterfaceWith3rdPartyEmbedded interface {
+	pflag.Value
+}
+
+type InterfaceExtension ExportedInterface
+type InterfaceAlias = ExportedInterface
+
+type NonInterfaceExtension *pflag.FlagSet
+type NonInterfaceAlias = pflag.FlagSet
+
+type RemoteInterfaceExtension io.Reader
+type RemoteInterfaceAlias = io.Reader
+
+type ThirdPartyInterfaceExtension pflag.Value
+type ThirdPartyInterfaceAlias = pflag.Value
+
+type IndirectThirdPartyInterfaceExtension ThirdPartyInterfaceExtension
+type IndirectThirdPartyInterfaceAlias ThirdPartyInterfaceAlias

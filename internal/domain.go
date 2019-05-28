@@ -1,17 +1,18 @@
 package wrapgen
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
 
-// Type is a Google-golang type definition that can be rendered into a valid
-// Google-golang code snippet.
+// Type is a Go type definition that can be rendered into a valid
+// Go code snippet.
 type Type interface {
 	String() string
 }
 
-// TypeBuiltin is a built in Google-golang type such as "string" or "bool".
+// TypeBuiltin is a built in Go type such as "string" or "bool".
 type TypeBuiltin string
 
 func (t TypeBuiltin) String() string { return string(t) }
@@ -113,9 +114,10 @@ func (t *TypePointer) String() string {
 	return "*" + t.Type.String()
 }
 
-// Package is a container for all exported interfaces of a Google-golang package.
+// Package is a container for all exported interfaces of a Go package.
 type Package struct {
 	Name       string
+	Source     *Import
 	Interfaces []*Interface
 	Imports    []*Import
 }
@@ -143,4 +145,9 @@ type Method struct {
 type Parameter struct {
 	Name string
 	Type Type
+}
+
+// TemplateFetcher is used to load a template from some source.
+type TemplateFetcher interface {
+	FetchTemplate(ctx context.Context, path string) (string, error)
 }
