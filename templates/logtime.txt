@@ -16,7 +16,7 @@ import (
     defer func(){
         log.Println("#! .Name !# latency:",time.Now().Since(start))
     }()
-	#! if ne (len .Out) 0 !#var #! range $x, $e := .Out !##! $e.Name !##! if ne $x (add (len $methodRef.Out) -1) !#,#! end !##! end !# = #! end !#w.#! .Name !#(#! range $x, $e := .In !##! $e.Name !##! if contains "..." $e.Type.String !#...#! end !##! if ne $x (add (len $methodRef.In ) -1) !#,#! end !##! end !#)
+	#! if ne (len .Out) 0 !#var #! range $x, $e := .Out !##! $e.Name !##! if ne $x (add (len $methodRef.Out) -1) !#,#! end !##! end !# = #! end !#w.wrapped.#! .Name !#(#! range $x, $e := .In !##! $e.Name !##! if contains "..." $e.Type.String !#...#! end !##! if ne $x (add (len $methodRef.In ) -1) !#,#! end !##! end !#)
 	return #! if ne (len .Out) 0 !##! range $x, $e := .Out !##! $e.Name !##! if ne $x (add (len $methodRef.Out) -1) !#,#! end !##! end !##! end !#
 }
 #! end !#
