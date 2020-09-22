@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"strings"
 	"text/template"
 	"time"
 
@@ -21,8 +20,8 @@ import (
 func main() {
 	ctx := context.Background()
 	fs := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
-	pkgPath := fs.String("source", "", "The import path of the package to render.")
-	pkgName := fs.String("package", "", "The package name that the resulting file will be in. Defaults to the source package.")
+	srcPkg := fs.String("source", "", "The import path of the package to render.")
+	destPkg := fs.String("package", "", "The destination package path or name that the resulting file will be in. Defaults to the source package.")
 	templatePath := fs.String("template", "", "The template to render.")
 	ifaceName := fs.StringSlice("interface", nil, "The name of the interface to render.")
 	leftDelim := fs.String("leftdelim", "#!", "Left-hand side delimiter for the template.")
@@ -44,13 +43,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "no --template value set")
 		os.Exit(1)
 	}
-	if *pkgPath == "" {
+	if *srcPkg == "" {
 		fmt.Fprintln(os.Stderr, "no --source value set")
 		os.Exit(1)
 	}
-	if *pkgName == "" {
-		_, last := path.Split(*pkgPath)
-		*pkgName = last
+	var pkgName, srcPkgAlias string
+	if *destPkg != "" {
+		_, last := path.Split(*destPkg)
+		pkgName = last
+		srcPkgAlias = "srcPkgAlias"
+	} else if *destPkg == "" {
+		_, last := path.Split(*srcPkg)
+		pkgName = last
 	}
 	if len(*ifaceName) < 1 {
 		fmt.Fprintln(os.Stderr, "no --interface value set")
@@ -76,18 +80,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	imports, interfaces, err := wrapgen.LoadInterfaces(ctx, *pkgPath, *ifaceName)
+	imports, interfaces, err := wrapgen.LoadInterfaces(ctx, *srcPkg, srcPkgAlias, *ifaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to interpret package: %v\n", err)
 		os.Exit(1)
 	}
 
-	_, last := path.Split(*pkgPath)
+	_, last := path.Split(*srcPkg)
 	tmplPkg := &wrapgen.Package{
-		Name: *pkgName,
+		Name: pkgName,
 		Source: &wrapgen.Import{
 			Package: last,
-			Path:    *pkgPath,
+			Path:    *srcPkg,
 		},
 		Interfaces: interfaces,
 		Imports:    imports,
@@ -99,15 +103,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	if last == *pkgName {
-		// Special case where the rendered file is targeted for the same package
-		// as the source content. For this case we strip the package prefix
-		// from any types that match the current package.
-		// This is a really hacky way to do this. TODO: Find a way to address
-		// this in parseType where *ast.Ident is handled.
-		s := buff.String()
-		_, _ = os.Stdout.WriteString(strings.ReplaceAll(s, fmt.Sprintf("%s.", *pkgName), ""))
-		os.Exit(0)
-	}
 	_, _ = io.Copy(os.Stdout, &buff)
 }
