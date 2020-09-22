@@ -10,7 +10,7 @@ import (
 #! $pkgName := .Source.Package !#
 #! range .Interfaces !#
 type Wraps#! .Name !# struct {
-	wrapped #! $pkgName !#.#! .Name !#
+	wrapped #! .SrcType !#
 }
 
 #! $ifaceRef := . !##! range .Methods !#

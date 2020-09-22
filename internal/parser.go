@@ -117,7 +117,7 @@ func loadInterface(ctx context.Context, pkg *packages.Package, name, srcPkgAlias
 					}
 					// https://golang.org/pkg/go/ast/#TypeSpec
 					// TypeSpec instances represent anywhere a new type is defined.
-					// TypeSpecs are categorized by their own Type field which
+					// TypeSpecs are categorized by their own SrcType field which
 					// indicates the kind of type definition. The possible values
 					// from the docs are:
 					//
@@ -411,7 +411,13 @@ func parseFunc(ctx context.Context, pkg *packages.Package, locals map[string]str
 }
 
 func parseInterface(ctx context.Context, pkg *packages.Package, locals map[string]string, name, srcPkgAlias string, i *ast.InterfaceType) ([]*Import, *Interface, error) {
-	var iface = &Interface{Name: name, Methods: make([]*Method, 0)}
+	var ifcType Type
+	if alias := locals[pkg.PkgPath]; alias != "" {
+		ifcType = &TypeExported{Package: alias, Type: TypeBuiltin(name)}
+	} else {
+		ifcType = TypeBuiltin(name)
+	}
+	var iface = &Interface{SrcType: ifcType, Name: name, Methods: make([]*Method, 0)}
 	var used []*Import
 	for _, attribute := range i.Methods.List {
 		switch n := attribute.Type.(type) {
