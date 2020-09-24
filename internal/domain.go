@@ -130,6 +130,7 @@ type Import struct {
 
 // Interface is an exported interface defined in a package.
 type Interface struct {
+	SrcType Type // e.g. srcPkgAlias.ExportedType
 	Name    string
 	Methods []*Method
 }

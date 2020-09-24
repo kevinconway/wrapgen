@@ -22,7 +22,7 @@ func TestParserSuccess(t *testing.T) {
 		"IndirectThirdPartyInterfaceExtension",
 		"IndirectThirdPartyInterfaceAlias",
 	}
-	_, interfaces, err := LoadInterfaces(ctx, path, names)
+	_, interfaces, err := LoadInterfaces(ctx, path, "", names)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -41,10 +41,25 @@ func TestParserFailure(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			_, _, err := LoadInterfaces(context.Background(), testCase.path, testCase.names)
+			_, _, err := LoadInterfaces(context.Background(), testCase.path, "", testCase.names)
 			if err == nil {
 				t.FailNow()
 			}
 		})
+	}
+}
+
+func TestParserSuccessSub(t *testing.T) {
+	ctx := context.Background()
+	path := "./test/sub/happy"
+	names := []string{
+		"Demo",
+	}
+	_, interfaces, err := LoadInterfaces(ctx, path, "", names)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	if len(interfaces) < len(names) {
+		t.Fatalf("did not render all interfaces: %v", interfaces)
 	}
 }

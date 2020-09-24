@@ -57,15 +57,17 @@ func loadPackage(ctx context.Context, path string) (*packages.Package, error) {
 	return pkg, nil
 }
 
-func LoadInterfaces(ctx context.Context, path string, names []string) ([]*Import, []*Interface, error) {
-	pkg, err := loadPackage(ctx, path)
+func LoadInterfaces(ctx context.Context, srcPkg, srcPkgAlias string, names []string) ([]*Import, []*Interface, error) {
+	pkg, err := loadPackage(ctx, srcPkg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load package data: %v", err)
 	}
-	var imports []*Import
-	var ifaces []*Interface
+	var (
+		imports []*Import
+		ifaces  []*Interface
+	)
 	for _, name := range names {
-		imps, iface, err := loadInterface(ctx, pkg, name)
+		imps, iface, err := loadInterface(ctx, pkg, name, srcPkgAlias)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -75,9 +77,12 @@ func LoadInterfaces(ctx context.Context, path string, names []string) ([]*Import
 	return imports, ifaces, nil
 }
 
-func loadInterface(ctx context.Context, pkg *packages.Package, name string) ([]*Import, *Interface, error) {
+func loadInterface(ctx context.Context, pkg *packages.Package, name, srcPkgAlias string) ([]*Import, *Interface, error) {
 	for _, f := range pkg.Syntax {
 		localImport := locals(ctx, pkg, f)
+		if srcPkgAlias != "" {
+			localImport[pkg.PkgPath] = srcPkgAlias
+		}
 		for _, decl := range f.Decls {
 			switch dd := decl.(type) {
 			case *ast.GenDecl:
@@ -112,7 +117,7 @@ func loadInterface(ctx context.Context, pkg *packages.Package, name string) ([]*
 					}
 					// https://golang.org/pkg/go/ast/#TypeSpec
 					// TypeSpec instances represent anywhere a new type is defined.
-					// TypeSpecs are categorized by their own Type field which
+					// TypeSpecs are categorized by their own SrcType field which
 					// indicates the kind of type definition. The possible values
 					// from the docs are:
 					//
@@ -137,7 +142,7 @@ func loadInterface(ctx context.Context, pkg *packages.Package, name string) ([]*
 						// InterfaceType is an easy case where something has been
 						// defined as `type T interface{}`. This is the clearest
 						// and easiest to handle case.
-						return parseInterface(ctx, pkg, localImport, ss.Name.String(), ff)
+						return parseInterface(ctx, pkg, localImport, ss.Name.String(), srcPkgAlias, ff)
 					case *ast.ParenExpr:
 						// It's not clear from the docs exactly how a ParenExpr
 						// might appear as a TypeSpec category. Placing this error
@@ -178,7 +183,7 @@ func loadInterface(ctx context.Context, pkg *packages.Package, name string) ([]*
 						// of a remote type being reference..
 						switch fft := ff.Obj.Decl.(*ast.TypeSpec).Type.(type) {
 						case *ast.InterfaceType:
-							return parseInterface(ctx, pkg, localImport, ss.Name.String(), fft)
+							return parseInterface(ctx, pkg, localImport, ss.Name.String(), srcPkgAlias, fft)
 						case *ast.SelectorExpr:
 							// This is a curious case where the right-hand side
 							// may actually resolve to a SelectorExpr when the
@@ -201,7 +206,7 @@ func loadInterface(ctx context.Context, pkg *packages.Package, name string) ([]*
 							remoteItemName := fft.Sel.Name
 							remotePkgName = localImport[remotePkgName]
 							remotePkg := pkg.Imports[remotePkgName]
-							var u, ifs, err = loadInterface(ctx, remotePkg, remoteItemName)
+							var u, ifs, err = loadInterface(ctx, remotePkg, remoteItemName, srcPkgAlias)
 							if err != nil {
 								return nil, nil, err
 							}
@@ -253,7 +258,7 @@ func loadInterface(ctx context.Context, pkg *packages.Package, name string) ([]*
 						// them where we encounter them.
 						remotePkgName = localImport[remotePkgName]
 						remotePkg := pkg.Imports[remotePkgName]
-						var u, ifs, err = loadInterface(ctx, remotePkg, remoteItemName)
+						var u, ifs, err = loadInterface(ctx, remotePkg, remoteItemName, srcPkgAlias)
 						if err != nil {
 							return nil, nil, err
 						}
@@ -321,8 +326,12 @@ func parseType(ctx context.Context, pkg *packages.Package, locals map[string]str
 		return u, result, nil
 	case *ast.Ident:
 		if n.IsExported() {
+			// alias indicate we want to alias a type in this package
+			if alias := locals[pkg.PkgPath]; alias != "" {
+				return []*Import{{Path: pkg.PkgPath, Package: alias}}, &TypeExported{Package: alias, Type: TypeBuiltin(n.Name)}, nil
+			}
 			// assume type in this package
-			return nil, &TypeExported{Package: pkg.Name, Type: TypeBuiltin(n.Name)}, nil
+			return nil, TypeBuiltin(n.Name), nil
 		}
 		return nil, TypeBuiltin(n.Name), nil
 	case *ast.InterfaceType:
@@ -349,7 +358,7 @@ func parseType(ctx context.Context, pkg *packages.Package, locals map[string]str
 		pkgName := n.X.(*ast.Ident).String()
 		pkgName = locals[pkgName]
 		remotePkg := pkg.Imports[pkgName]
-		return []*Import{&Import{Path: remotePkg.PkgPath, Package: remotePkg.Name}}, &TypeExported{Package: remotePkg.Name, Type: TypeBuiltin(n.Sel.String())}, nil
+		return []*Import{{Path: remotePkg.PkgPath, Package: remotePkg.Name}}, &TypeExported{Package: remotePkg.Name, Type: TypeBuiltin(n.Sel.String())}, nil
 	case *ast.StarExpr:
 		var u, t, e = parseType(ctx, pkg, locals, n.X)
 		if e != nil {
@@ -401,8 +410,14 @@ func parseFunc(ctx context.Context, pkg *packages.Package, locals map[string]str
 	return used, method, nil
 }
 
-func parseInterface(ctx context.Context, pkg *packages.Package, locals map[string]string, name string, i *ast.InterfaceType) ([]*Import, *Interface, error) {
-	var iface = &Interface{Name: name, Methods: make([]*Method, 0)}
+func parseInterface(ctx context.Context, pkg *packages.Package, locals map[string]string, name, srcPkgAlias string, i *ast.InterfaceType) ([]*Import, *Interface, error) {
+	var ifcType Type
+	if alias := locals[pkg.PkgPath]; alias != "" {
+		ifcType = &TypeExported{Package: alias, Type: TypeBuiltin(name)}
+	} else {
+		ifcType = TypeBuiltin(name)
+	}
+	var iface = &Interface{SrcType: ifcType, Name: name, Methods: make([]*Method, 0)}
 	var used []*Import
 	for _, attribute := range i.Methods.List {
 		switch n := attribute.Type.(type) {
@@ -414,7 +429,7 @@ func parseInterface(ctx context.Context, pkg *packages.Package, locals map[strin
 			used = append(used, u...)
 			iface.Methods = append(iface.Methods, m)
 		case *ast.Ident:
-			var u, ifs, err = loadInterface(ctx, pkg, n.String())
+			var u, ifs, err = loadInterface(ctx, pkg, n.String(), srcPkgAlias)
 			if err != nil {
 				return nil, nil, fmt.Errorf(
 					"missing local embedded interface %s: %v",
@@ -427,7 +442,7 @@ func parseInterface(ctx context.Context, pkg *packages.Package, locals map[strin
 			pkgName := n.X.(*ast.Ident).String()
 			pkgName = locals[pkgName]
 			remotePkg := pkg.Imports[pkgName]
-			u, ifs, err := loadInterface(ctx, remotePkg, n.Sel.String())
+			u, ifs, err := loadInterface(ctx, remotePkg, n.Sel.String(), srcPkgAlias)
 			if err != nil {
 				return nil, nil, fmt.Errorf(
 					"missing remote embedded interface %s.%s: %v",

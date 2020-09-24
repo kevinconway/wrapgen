@@ -120,6 +120,7 @@ type Import struct {
 
 // Interface is an exported interface defined in a package.
 type Interface struct {
+	SrcType Type
 	Name    string
 	Methods []*Method
 }
