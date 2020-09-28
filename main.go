@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig"
-	wrapgen "github.com/kevinconway/wrapgen/internal"
+	wrapgen "github.com/kevinconway/wrapgen/v2/internal"
 	"github.com/spf13/pflag"
 )
 

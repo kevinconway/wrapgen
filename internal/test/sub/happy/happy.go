@@ -1,7 +1,7 @@
 package happy
 
 import (
-	"github.com/kevinconway/wrapgen/internal/test/happy"
+	"github.com/kevinconway/wrapgen/v2/internal/test/happy"
 )
 
 type DemoType struct{}
