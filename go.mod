@@ -1,12 +1,12 @@
-module github.com/kevinconway/wrapgen
+module github.com/kevinconway/wrapgen/v2
 
-go 1.12
+go 1.15
 
 require (
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible
-	github.com/golang/mock v1.3.1
+	github.com/golang/mock v1.4.4
 	github.com/google/uuid v1.1.2 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
@@ -15,5 +15,5 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1 // indirect
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a // indirect
-	golang.org/x/tools v0.0.0-20200922173257-82fe25c37531
+	golang.org/x/tools v0.0.0-20200928112810-42b62fc93869
 )
