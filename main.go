@@ -49,15 +49,6 @@ func main() {
 		os.Exit(1)
 	}
 	var output io.Writer = os.Stdout
-	if *destination != "-" {
-		f, err := os.Create(*destination)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "faild to create destination file: %v\n", err)
-			os.Exit(1)
-		}
-		defer f.Close()
-		output = f
-	}
 	var pkgName, srcPkgAlias string
 	if *destPkg != "" {
 		_, last := path.Split(*destPkg)
@@ -112,6 +103,16 @@ func main() {
 	if err := tmpl.Execute(&buff, tmplPkg); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to render template: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *destination != "-" {
+		f, err := os.Create(*destination)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "faild to create destination file: %v\n", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		output = f
 	}
 
 	_, _ = io.Copy(output, &buff)
