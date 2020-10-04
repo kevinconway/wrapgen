@@ -11,6 +11,10 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+const (
+	sourceAlias = "srcPkgAlias"
+)
+
 func loadPackage(ctx context.Context, path string) (*packages.Package, error) {
 	fset := token.NewFileSet()
 	conf := &packages.Config{
@@ -55,6 +59,34 @@ func loadPackage(ctx context.Context, path string) (*packages.Package, error) {
 		return nil, fmt.Errorf("%s only contains test packages", path)
 	}
 	return pkg, nil
+}
+
+func LoadPackage(ctx context.Context, srcPkg string, dstPkg string, names []string) (*Package, error) {
+	pkg, err := loadPackage(ctx, srcPkg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load package data: %v", err)
+	}
+	var srcPkgAlias string
+	if dstPkg != "" {
+		srcPkgAlias = sourceAlias
+	}
+	imports, interfaces, err := LoadInterfaces(ctx, srcPkg, srcPkgAlias, names)
+	if err != nil {
+		return nil, err
+	}
+	result := &Package{
+		Name: dstPkg,
+		Source: &Import{
+			Package: pkg.Name,
+			Path:    srcPkg,
+		},
+		Interfaces: interfaces,
+		Imports:    imports,
+	}
+	if result.Name == "" {
+		result.Name = pkg.Name
+	}
+	return result, nil
 }
 
 func LoadInterfaces(ctx context.Context, srcPkg, srcPkgAlias string, names []string) ([]*Import, []*Interface, error) {
