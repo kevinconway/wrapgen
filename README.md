@@ -3,8 +3,8 @@
 This project can inject the details of any Go interface into a custom template.
 The goal is to enable teams who either make frequent use of interface wrappers
 to layer on behavior, such as using a decorator pattern, or teams who often need
-to generate standard implementations of some interfaces, such as those genrating
-stubs for a test.
+to generate standard implementations of some interfaces, such as those
+generating stubs for a test.
 
 This project is heavily inspired by <https://github.com/golang/mock> which
 contains a tool called `mockgen` that can generate an advanced mock
@@ -15,7 +15,7 @@ implementation of any Go interface.
 ### Quick Example
 
 ```bash
-go install github.com/kevinconway/wrapgen
+go install github.com/kevinconway/wrapgen/v2
 go install golang.org/x/tools/cmd/goimports
 
 ${GOPATH}/bin/wrapgen \
@@ -66,9 +66,10 @@ func (w *WrapsWriter) Write(p []byte) (int, error) {
 }
 ```
 
-All output is written to `stdout` and `stderr`. Template paths may either be
-URLs or file system paths. It is highly suggested to use `goimports` or another
-formatter as a post-processor.
+All output is written to `stdout` and `stderr` by default. An optional
+destination file may be provided as an alternative to `stdout`. Template paths
+may either be URLs or file system paths. It is highly suggested to use
+`goimports` or another formatter as a post-processor.
 
 ### CLI Options
 
@@ -76,6 +77,7 @@ formatter as a post-processor.
 wrapgen --help
 
 Usage of wrapgen:
+      --destination string   Filename for the rendered template. Defaults to STDOUT. (default "-")
       --interface strings   The name of the interface to render.
       --leftdelim string    Left-hand side delimiter for the template. (default "#!")
       --package string      The package name that the resulting file will be in. Defaults to the source package.

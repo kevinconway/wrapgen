@@ -27,6 +27,7 @@ func main() {
 	leftDelim := fs.String("leftdelim", "#!", "Left-hand side delimiter for the template.")
 	rightDelim := fs.String("rightdelim", "!#", "Right-hand side delimiter for the template.")
 	timeout := fs.Duration("timeout", time.Minute, "Maximum runtime allowed for rendering.")
+	destination := fs.String("destination", "-", "Filename for the rendered template. Defaults to STDOUT.")
 	_ = fs.Parse(os.Args[1:])
 
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
@@ -46,6 +47,16 @@ func main() {
 	if *srcPkg == "" {
 		fmt.Fprintln(os.Stderr, "no --source value set")
 		os.Exit(1)
+	}
+	var output io.Writer = os.Stdout
+	if *destination != "-" {
+		f, err := os.Create(*destination)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "faild to create destination file: %v\n", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		output = f
 	}
 	var pkgName, srcPkgAlias string
 	if *destPkg != "" {
@@ -103,5 +114,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, _ = io.Copy(os.Stdout, &buff)
+	_, _ = io.Copy(output, &buff)
 }
