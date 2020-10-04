@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path"
 	"text/template"
 	"time"
 
@@ -49,15 +48,6 @@ func main() {
 		os.Exit(1)
 	}
 	var output io.Writer = os.Stdout
-	var pkgName, srcPkgAlias string
-	if *destPkg != "" {
-		_, last := path.Split(*destPkg)
-		pkgName = last
-		srcPkgAlias = "srcPkgAlias"
-	} else if *destPkg == "" {
-		_, last := path.Split(*srcPkg)
-		pkgName = last
-	}
 	if len(*ifaceName) < 1 {
 		fmt.Fprintln(os.Stderr, "no --interface value set")
 		os.Exit(1)
@@ -82,25 +72,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	imports, interfaces, err := wrapgen.LoadInterfaces(ctx, *srcPkg, srcPkgAlias, *ifaceName)
+	pkg, err := wrapgen.LoadPackage(ctx, *srcPkg, *destPkg, *ifaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to interpret package: %v\n", err)
 		os.Exit(1)
 	}
 
-	_, last := path.Split(*srcPkg)
-	tmplPkg := &wrapgen.Package{
-		Name: pkgName,
-		Source: &wrapgen.Import{
-			Package: last,
-			Path:    *srcPkg,
-		},
-		Interfaces: interfaces,
-		Imports:    imports,
-	}
-
 	var buff bytes.Buffer
-	if err := tmpl.Execute(&buff, tmplPkg); err != nil {
+	if err := tmpl.Execute(&buff, pkg); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to render template: %v\n", err)
 		os.Exit(1)
 	}

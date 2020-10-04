@@ -57,6 +57,30 @@ func loadPackage(ctx context.Context, path string) (*packages.Package, error) {
 	return pkg, nil
 }
 
+func LoadPackage(ctx context.Context, srcPkg string, dstPkg string, names []string) (*Package, error) {
+	pkg, err := loadPackage(ctx, srcPkg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load package data: %v", err)
+	}
+	var srcPkgAlias string
+	if dstPkg != "" {
+		srcPkgAlias = "srcPkgAlias"
+	}
+	imports, interfaces, err := LoadInterfaces(ctx, srcPkg, srcPkgAlias, names)
+	if err != nil {
+		return nil, err
+	}
+	return &Package{
+		Name: pkg.Name,
+		Source: &Import{
+			Package: pkg.Name,
+			Path:    srcPkg,
+		},
+		Interfaces: interfaces,
+		Imports:    imports,
+	}, nil
+}
+
 func LoadInterfaces(ctx context.Context, srcPkg, srcPkgAlias string, names []string) ([]*Import, []*Interface, error) {
 	pkg, err := loadPackage(ctx, srcPkg)
 	if err != nil {

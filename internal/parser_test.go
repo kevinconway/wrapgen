@@ -1,8 +1,8 @@
 package wrapgen
 
 import (
-	"testing"
 	"context"
+	"testing"
 )
 
 func TestParserSuccess(t *testing.T) {
@@ -22,26 +22,24 @@ func TestParserSuccess(t *testing.T) {
 		"IndirectThirdPartyInterfaceExtension",
 		"IndirectThirdPartyInterfaceAlias",
 	}
-	_, interfaces, err := LoadInterfaces(ctx, path, "", names)
+	pkg, err := LoadPackage(ctx, path, "", names)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	if len(interfaces) < len(names) {
-		t.Fatalf("did not render all interfaces: %v", interfaces)
+	if len(pkg.Interfaces) < len(names) {
+		t.Fatalf("did not render all interfaces: %v", pkg.Interfaces)
 	}
 }
 
 func TestParserFailure(t *testing.T) {
-	testCases := []struct{
-		name string
-		path string
+	testCases := []struct {
+		name  string
+		path  string
 		names []string
-	}{
-
-	}
+	}{}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			_, _, err := LoadInterfaces(context.Background(), testCase.path, "", testCase.names)
+			_, err := LoadPackage(context.Background(), testCase.path, "", testCase.names)
 			if err == nil {
 				t.FailNow()
 			}
@@ -55,11 +53,11 @@ func TestParserSuccessSub(t *testing.T) {
 	names := []string{
 		"Demo",
 	}
-	_, interfaces, err := LoadInterfaces(ctx, path, "", names)
+	pkg, err := LoadPackage(ctx, path, "", names)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	if len(interfaces) < len(names) {
-		t.Fatalf("did not render all interfaces: %v", interfaces)
+	if len(pkg.Interfaces) < len(names) {
+		t.Fatalf("did not render all interfaces: %v", pkg.Interfaces)
 	}
 }
