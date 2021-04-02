@@ -79,7 +79,7 @@ func LoadPackage(ctx context.Context, srcPkg string, dstPkg string, names []stri
 		Name: dstPkg,
 		Source: &Import{
 			Package: pkg.Name,
-			Path:    srcPkg,
+			Path:    pkg.PkgPath,
 		},
 		Interfaces: interfaces,
 		Imports:    imports,
