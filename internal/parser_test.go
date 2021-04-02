@@ -2,6 +2,9 @@ package wrapgen
 
 import (
 	"context"
+	"fmt"
+	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -65,7 +68,7 @@ func TestParserSuccessCustomPackageName(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("did not inject a source package alias: %v", pkg.Imports)
+		t.Fatalf("did not inject a source package alias: %v", getImportsPaths(pkg.Imports))
 	}
 }
 
@@ -108,7 +111,7 @@ func TestParserSuccessSub(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("did not inject a source package alias: %v", pkg.Imports)
+		t.Fatalf("did not inject a source package alias: %v", getImportsPaths(pkg.Imports))
 	}
 }
 
@@ -138,6 +141,130 @@ func TestParserUniqueImports(t *testing.T) {
 		importsMap[imp.Package] = true
 	}
 	if len(pkg.Imports) != len(importsMap) {
-		t.Fatalf("expected imports to be deduplicated: %v", pkg.Imports)
+		t.Fatalf("expected imports to be deduplicated: %v", getImportsPaths(pkg.Imports))
 	}
+}
+
+func TestParserImportsWithoutSource(t *testing.T) {
+	ctx := context.Background()
+	path := "./test/happy"
+	names := []string{
+		"ExportedInterfaceWithRemoteEmbedded",
+	}
+	pkg, err := LoadPackage(ctx, path, "", names)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	importsPaths := getImportsPaths(pkg.Imports)
+	expectedImportsPaths := []string{
+		"io:io",
+	}
+	if !reflect.DeepEqual(importsPaths, expectedImportsPaths) {
+		t.Fatalf("unexpected imports: %v", importsPaths)
+	}
+	importsWithSourcePaths := getImportsPaths(pkg.ImportsWithSource)
+	expectedImportsWithSourcePaths := []string{
+		"io:io",
+	}
+	if !reflect.DeepEqual(importsWithSourcePaths, expectedImportsWithSourcePaths) {
+		t.Fatalf("unexpected imports with source: %v", importsWithSourcePaths)
+	}
+}
+
+func TestParserImportsWithoutSourceDest(t *testing.T) {
+	ctx := context.Background()
+	path := "./test/happy"
+	names := []string{
+		"ExportedInterfaceWithRemoteEmbedded",
+	}
+	pkg, err := LoadPackage(ctx, path, "wrappers", names)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	importsPaths := getImportsPaths(pkg.Imports)
+	expectedImportsPaths := []string{
+		"io:io",
+	}
+	if !reflect.DeepEqual(importsPaths, expectedImportsPaths) {
+		t.Fatalf("unexpected imports: %v", importsPaths)
+	}
+	importsWithSourcePaths := getImportsPaths(pkg.ImportsWithSource)
+	expectedImportsWithSourcePaths := []string{
+		"io:io",
+		"srcPkgAlias:github.com/kevinconway/wrapgen/v2/internal/test/happy",
+	}
+	if !reflect.DeepEqual(importsWithSourcePaths, expectedImportsWithSourcePaths) {
+		t.Fatalf("unexpected imports with source: %v", importsWithSourcePaths)
+	}
+}
+
+func TestParserImportsWithSource(t *testing.T) {
+	ctx := context.Background()
+	path := "./test/happy"
+	names := []string{
+		"ExportedInterface",
+	}
+	pkg, err := LoadPackage(ctx, path, "", names)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	importsPaths := getImportsPaths(pkg.Imports)
+	expectedImportsPaths := []string{
+		"http:net/http",
+		"os:os",
+		"pflag:github.com/spf13/pflag",
+	}
+	if !reflect.DeepEqual(importsPaths, expectedImportsPaths) {
+		t.Fatalf("unexpected imports: %v", importsPaths)
+	}
+	importsWithSourcePaths := getImportsPaths(pkg.ImportsWithSource)
+	expectedImportsWithSourcePaths := []string{
+		"http:net/http",
+		"os:os",
+		"pflag:github.com/spf13/pflag",
+	}
+	if !reflect.DeepEqual(importsWithSourcePaths, expectedImportsWithSourcePaths) {
+		t.Fatalf("unexpected imports with source: %v", importsWithSourcePaths)
+	}
+}
+
+func TestParserImportsWithSourceDest(t *testing.T) {
+	ctx := context.Background()
+	path := "./test/happy"
+	names := []string{
+		"ExportedInterface",
+	}
+	pkg, err := LoadPackage(ctx, path, "wrappers", names)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	importsPaths := getImportsPaths(pkg.Imports)
+	expectedImportsPaths := []string{
+		"http:net/http",
+		"os:os",
+		"pflag:github.com/spf13/pflag",
+		"srcPkgAlias:github.com/kevinconway/wrapgen/v2/internal/test/happy",
+	}
+	if !reflect.DeepEqual(importsPaths, expectedImportsPaths) {
+		t.Fatalf("unexpected imports: %v", importsPaths)
+	}
+	importsWithSourcePaths := getImportsPaths(pkg.ImportsWithSource)
+	expectedImportsWithSourcePaths := []string{
+		"http:net/http",
+		"os:os",
+		"pflag:github.com/spf13/pflag",
+		"srcPkgAlias:github.com/kevinconway/wrapgen/v2/internal/test/happy",
+	}
+	if !reflect.DeepEqual(importsWithSourcePaths, expectedImportsWithSourcePaths) {
+		t.Fatalf("unexpected imports with source: %v", importsWithSourcePaths)
+	}
+}
+
+func getImportsPaths(imports []*Import) []string {
+	importsPaths := make([]string, len(imports))
+	for i, imp := range imports {
+		importsPaths[i] = fmt.Sprintf("%s:%s", imp.Package, imp.Path)
+	}
+	sort.Strings(importsPaths)
+	return importsPaths
 }

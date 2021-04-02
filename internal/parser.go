@@ -81,8 +81,23 @@ func LoadPackage(ctx context.Context, srcPkg string, dstPkg string, names []stri
 			Package: pkg.Name,
 			Path:    pkg.PkgPath,
 		},
-		Interfaces: interfaces,
-		Imports:    imports,
+		Interfaces:        interfaces,
+		Imports:           imports,
+		ImportsWithSource: append([]*Import{}, imports...),
+	}
+	if dstPkg != "" {
+		importsContainSource := false
+		for _, imp := range result.Imports {
+			if imp.Path == pkg.PkgPath {
+				importsContainSource = true
+			}
+		}
+		if !importsContainSource {
+			result.ImportsWithSource = append(result.ImportsWithSource, &Import{
+				Package: sourceAlias,
+				Path:    pkg.PkgPath,
+			})
+		}
 	}
 	if result.Name == "" {
 		result.Name = pkg.Name
