@@ -74,6 +74,7 @@ func LoadPackage(ctx context.Context, srcPkg string, dstPkg string, names []stri
 	if err != nil {
 		return nil, err
 	}
+	imports = filterUniqueImports(imports)
 	result := &Package{
 		Name: dstPkg,
 		Source: &Import{
@@ -245,7 +246,6 @@ func loadInterface(ctx context.Context, pkg *packages.Package, name, srcPkgAlias
 							ifs.Name = name
 							return append(u, &Import{Path: remotePkg.PkgPath, Package: remotePkg.Name}), ifs, nil
 						default:
-							fmt.Printf("%T\n", fft)
 							return nil, nil, fmt.Errorf(
 								"%s in %s is not an interface", name, pkg.PkgPath,
 							)
@@ -502,4 +502,17 @@ func locals(ctx context.Context, pkg *packages.Package, f *ast.File) map[string]
 		results[pkg.Imports[pth].Name] = pth
 	}
 	return results
+}
+
+func filterUniqueImports(imports []*Import) []*Import {
+	newImports := make([]*Import, 0, len(imports))
+	importsMap := make(map[string]bool, len(imports))
+	for _, imp := range imports {
+		if importsMap[imp.Package] {
+			continue
+		}
+		newImports = append(newImports, imp)
+		importsMap[imp.Package] = true
+	}
+	return newImports
 }

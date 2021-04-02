@@ -111,3 +111,33 @@ func TestParserSuccessSub(t *testing.T) {
 		t.Fatalf("did not inject a source package alias: %v", pkg.Imports)
 	}
 }
+
+func TestParserUniqueImports(t *testing.T) {
+	ctx := context.Background()
+	path := "./test/happy"
+	names := []string{
+		"ExportedInterface",
+		"ExportedInterfaceWithEmbedded",
+		"ExportedInterfaceWithRemoteEmbedded",
+		"ExportedInterfaceWith3rdPartyEmbedded",
+		"InterfaceExtension",
+		"InterfaceAlias",
+		"RemoteInterfaceExtension",
+		"RemoteInterfaceAlias",
+		"ThirdPartyInterfaceExtension",
+		"ThirdPartyInterfaceAlias",
+		"IndirectThirdPartyInterfaceExtension",
+		"IndirectThirdPartyInterfaceAlias",
+	}
+	pkg, err := LoadPackage(ctx, path, "", names)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	importsMap := map[string]bool{}
+	for _, imp := range pkg.Imports {
+		importsMap[imp.Package] = true
+	}
+	if len(pkg.Imports) != len(importsMap) {
+		t.Fatalf("expected imports to be deduplicated: %v", pkg.Imports)
+	}
+}
