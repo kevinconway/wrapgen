@@ -120,6 +120,9 @@ type Package struct {
 	Source     *Import
 	Interfaces []*Interface
 	Imports    []*Import
+	// ImportsWithSource will contain Source if the destination package is set and
+	// Source is not included in Imports.
+	ImportsWithSource []*Import
 }
 
 // Import is a package name and path that is imported by another package.
