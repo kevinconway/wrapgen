@@ -14,6 +14,5 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.1 // indirect
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1 // indirect
-	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a // indirect
-	golang.org/x/tools v0.0.0-20200928112810-42b62fc93869
+	golang.org/x/tools v0.18.0
 )
