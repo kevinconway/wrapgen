@@ -1,5 +1,18 @@
 # wrapgen - A code generator for Go interfaces
 
+# No Longer Maintained
+
+I recommend using <https://github.com/hexdigest/gowrap> as an alternative. As of
+2024-06-21, [GoWrap](https://github.com/hexdigest/gowrap) is a maintained
+project that solves the exact same problem as this project and has been updated
+to support generics.
+
+This tool should still work for Go code that does *not* use generics. I do not
+plan to update the tool for generics or any other type system additions in the
+future.
+
+## Old Documentation
+
 This project can inject the details of any Go interface into a custom template.
 The goal is to enable teams who either make frequent use of interface wrappers
 to layer on behavior, such as using a decorator pattern, or teams who often need
